@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>时间的影子 · 回溯解谜</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:#e6ecf7;background:radial-gradient(ellipse at 65% 0%,#202b45,transparent 60%),#101522;font:16px/1.6 "Microsoft YaHei",system-ui,sans-serif}main{max-width:1160px;margin:auto;padding:32px clamp(16px,4vw,54px)}header,.row,footer,.group{display:flex;align-items:center;justify-content:space-between;gap:14px}header{margin-bottom:22px}h1,h2,p{margin:0}h1,h2{font-family:"Songti SC",SimSun,serif;font-weight:500;letter-spacing:.12em}h1{font-size:clamp(27px,4vw,46px)}.brand{display:flex;align-items:center;gap:16px}.sigil{width:30px;height:36px;background:linear-gradient(135deg,#ffe4ab,#b88b62);clip-path:polygon(0 0,100% 0,57% 50%,100% 100%,0 100%,43% 50%,14% 12%,31% 12%,50% 38%,75% 7%,0 7%)}.steps{color:#b6bfd2;letter-spacing:.1em;font:14px monospace}.stage{position:relative;isolation:isolate;border:1px solid #455068;border-radius:18px;overflow:hidden;background:radial-gradient(ellipse at 52% 66%,#333f61 0%,#202942 44%,#141c30 86%);box-shadow:0 24px 65px #05081466}.room{position:absolute;top:22px;left:26px;z-index:1;pointer-events:none}.label{color:#dac19b;letter-spacing:.22em;font-size:12px}.room h2{font-size:29px}canvas{width:100%;display:block;height:auto}.hint{position:absolute;top:25px;right:24px}.note{padding:12px 24px;border-top:1px solid #3c4760;color:#d7dfed;background:#192236;min-height:51px}.panel{padding:18px 0;border-bottom:1px solid #374055;flex-wrap:wrap}button{color:#dce3f0;background:#222c40;border:1px solid #47536b;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer;touch-action:manipulation}button:hover,button:focus-visible{border-color:#efcf97;color:white}.primary{color:#282531;background:#e6c695;border-color:#e6c695}kbd{font:12px monospace;opacity:.75;border:1px solid currentColor;border-radius:4px;padding:1px 5px;margin-left:6px}footer{font-size:14px;color:#afbbd0;flex-wrap:wrap;padding-top:16px}.gold{color:#eaca92}.cyan{color:#85d8db}.pad{display:none}.veil{position:absolute;inset:0;z-index:3;display:grid;place-content:center;text-align:center;background:#11182be8}.veil[hidden]{display:none}.veil h2{font-size:32px;margin:12px}.veil button{margin:15px auto}.veil p{padding:0 16px}.pad button{touch-action:none}@media(max-width:680px),(pointer:coarse){.pad{display:flex;gap:6px;justify-content:center;margin-top:14px}.pad button{min-width:48px}.room{top:10px;left:14px}.room h2{font-size:20px}.hint{top:12px;right:12px;padding:4px 9px}main{padding:16px 12px}.group{gap:6px}.panel{gap:8px}canvas{margin-top:40px}.note{font-size:14px;padding:9px 12px}kbd{display:none}}
+</style>
+<main><header><div class="brand"><i class="sigil"></i><h1>时间的影子</h1></div><span class="steps" id="progress"></span></header>
+<section class="stage"><div class="room"><div class="label" id="chapter"></div><h2 id="title"></h2></div><button class="hint" id="hint">查看提示</button><canvas width="1000" height="448" aria-label="浮空石台上的解谜房间"></canvas>
+<div class="note" id="note" aria-live="polite"></div><div class="veil" id="veil" hidden><div class="label" id="endLabel"></div><h2 id="endTitle"></h2><p id="endText"></p><button class="primary" id="next"></button></div></section>
+<div class="row panel"><span id="state"></span><div class="group"><button id="sound" aria-pressed="true">声音开启</button><button class="primary" id="rewind">回溯<kbd>空格</kbd></button><button id="reset">重试<kbd>R</kbd></button></div></div>
+<div class="pad" aria-label="移动方向"><button data-dir="a">←</button><button data-dir="w">↑</button><button data-dir="s">↓</button><button data-dir="d">→</button></div>
+<footer><span>方向键 / WASD 移动</span><span><b class="gold">◆</b> 你　 <b class="cyan">◇</b> 影子　 ▧ 踏板　 ◎ 终点</span></footer></main>
+<script>
+'use strict';
+const rooms=[
+ {name:'留步',map:['..aaa......','..apa......','..aaa......','.aaaa..aaa.','.aSaaaAaga.','.aaaa..aaa.'],intro:'走上刻有横纹的踏板，观察石门。',tip:'站在踏板上回溯，让影子留下来。你可以穿过它守住的门。'},
+ {name:'等我一下',map:['..aaapabaaa','..aaaaaaaaa','..aa.......','.aaAaBaaga.','.aSa.......'],intro:'两块踏板，两道门。把等待也留在记忆里。',tip:'先在横纹踏板停留几秒，再走到双点踏板并回溯。趁影子等待时穿过第一道门。'},
+ {name:'隔岸接力',map:['.apa.......','.aaa...aaa.','.aSaaAabaa.','..a........','.aaaaBaaga.'],intro:'岸上的横纹踏板通往对岸，对岸的双点踏板通往出口。',tip:'先留下守横纹踏板的影子，借它过桥，停在双点踏板再回溯。替新影子开桥，等它站稳，就能从下面离开。'},
+ {name:'合鸣',map:['.apa...aba.','.aaa...aaa.','..aaaaaaa..','.....S.....','.....A.....','....aga....'],intro:'两处踏板同时亮起时，中庭的门会一直敞开。',tip:'先录下走到一侧踏板的路线。回溯后去另一侧，等两个踏板同时亮起，再回中庭向下走。'},
+ {name:'换你出去',map:['..apa..aga.','..aaa..aha.','.aSaaaAaaa.','.aaa...aaa.','...aaaaCaa.'],intro:'让影子抵达圆环，你再走向菱形。',tip:'先录下守踏板的影子，借它开门走到圆环，再回溯。你去踩踏板，等新影子走到圆环，下方侧门就会开启。'}
+];
+const el=id=>document.getElementById(id),canvas=document.querySelector('canvas'),c=canvas.getContext('2d');
+const dirs={a:[-1,0],d:[1,0],w:[0,-1],s:[0,1]},keys={ArrowLeft:'a',ArrowRight:'d',ArrowUp:'w',ArrowDown:'s'};
+let level=0,map,start,player,ghost,tape,record,tick,index,finished,replayDelay,wasPlate,shown,prev=0,acc=0;
+let latched=false;
+const heldKeys=new Set();
+const speed=3.75, hz=120, stride=speed/hz;
+function tile(p){return p&&map[Math.round(p.y)]?.[Math.round(p.x)]}
+function axis(){let x=0,y=0;for(const d of heldKeys){x+=dirs[d][0];y+=dirs[d][1]}const norm=Math.hypot(x,y);return norm?[x/norm,y/norm]:null}
+function load(n){
+ level=n;map=rooms[n].map;map.forEach((r,y)=>{if(r.includes('S'))start={x:r.indexOf('S'),y}});
+ tape=null;ghost=null;shown=false;wasPlate=false;finished=false;el('veil').hidden=true;restart();
+ el('title').textContent=rooms[n].name;el('chapter').textContent=['第一章','第二章','第三章','第四章','终章'][n];el('progress').textContent='0'+(n+1)+' / 05';
+ el('note').textContent=rooms[n].intro;
+}
+function restart(){latched=false;heldKeys.clear();player={...start};ghost=tape?{...start}:null;tick=0;index=0;record=[];replayDelay=0;acc=0;el('state').textContent=tape?'◇　影子正在重演':'◆　正在记录你的行动'}
+function rewind(){if(finished)return;if(!record.length){el('note').textContent='先走几步，再把这段行动留给影子。';return}cue("rewind");tape=record;restart();el('note').textContent='影子会重走你的路线，并停在最后一步。'}
+function openGate(t){const p=tile(player),g=tile(ghost);if(level===3&&t==='A')return latched;return t==='A'?p==='p'||g==='p':t==='B'?p==='b'||g==='b':t==='C'?g==='g':true}
+function allowed(p,from=player){const t=tile(p);if(t===tile(from))return true;if(t==='C'&&Math.round(from.x)>=Math.round(p.x))return false;return !!t&&t!=='.'&&openGate(t)}
+function step(dir){
+ if(finished||(!dir&&!tape&&!record.length))return;tick++;
+ if(tape&&index<tape.length&&tape[index].time+replayDelay<=tick){
+ const dest=tape[index];if(allowed(dest,ghost)){ghost={x:dest.x,y:dest.y};index++}else replayDelay++;
+ if(index===tape.length)el('state').textContent='◇　影子已停驻';
+ }
+ if(dir){
+  const old=player;
+  const horizontal={x:player.x+dir[0]*stride,y:player.y};
+  if(allowed(horizontal))player=horizontal;
+  const vertical={x:player.x,y:player.y+dir[1]*stride};
+  if(allowed(vertical))player=vertical;
+  if(old.x!==player.x||old.y!==player.y)record.push({...player,time:tick});
+ }
+ if(level===3&&!latched&&[tile(ghost),tile(player)].includes('p')&&[tile(ghost),tile(player)].includes('b')){
+  latched=true;el('note').textContent='两处回声合鸣。中庭的门已锁定在开启位置。';
+ }
+ const p=tile(player);
+ if(!level&&wasPlate&&p!=='p'&&!shown&&!ghost){shown=true;el('note').textContent='按空格，看看刚才的你会做什么。'}
+ wasPlate=p==='p';
+ if(level===rooms.length-1?p==='h'&&tile(ghost)==='g':p==='g')finish();
+}
+function finish(){cue("finish");heldKeys.clear();finished=true;const last=level===rooms.length-1;el('veil').hidden=false;el('endLabel').textContent=last?'终章 · 完成':'房间已完成';el('endTitle').textContent=last?'这次，一起出去。':rooms[level].name;el('endText').textContent=['你走过了自己留下的那扇门。','你们隔着时间，配合得刚刚好。','对岸的影子，接住了你留下的路。','两处回声合成了一声。','最后一扇门，是你为影子打开的。'][level];el('next').textContent=last?'从头再玩':'进入下一章';el('next').focus()}
+function press(d){if(!finished){heldKeys.add(d);}}
+onkeydown=e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;const d=keys[e.key]||e.key.toLowerCase();if(finished)return;if(dirs[d]){e.preventDefault();if(!e.repeat)press(d)}else if(e.code==='Space'&&!(document.activeElement?.tagName==='BUTTON'&&document.activeElement.matches(':focus-visible'))){e.preventDefault();if(!e.repeat)rewind()}else if(d==='r'&&!e.repeat)load(level)};
+onkeyup=e=>{heldKeys.delete(keys[e.key]||e.key.toLowerCase())};onblur=()=>{heldKeys.clear();prev=0;acc=0};
+document.querySelectorAll('[data-dir]').forEach(b=>{b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);press(b.dataset.dir)};b.onlostpointercapture=()=>heldKeys.delete(b.dataset.dir);b.onpointerup=b.onlostpointercapture});
+el('next').onclick=()=>load((level+1)%rooms.length);el('rewind').onclick=rewind;el('reset').onclick=()=>load(level);el('hint').onclick=()=>el('note').textContent=rooms[level].tip;
+function poly(points,fill,stroke){c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();c.fillStyle=fill;c.fill();if(stroke){c.strokeStyle=stroke;c.stroke()}}
+function ellipse(x,y,w,h,color){c.beginPath();c.ellipse(x,y,w,h,0,0,Math.PI*2);c.fillStyle=color;c.fill()}
+function pos(x,y){return [175+x*63-y*9,112+y*40]}
+function slab(x,y,seed){
+ const depth=12+(seed%4)*5;poly([[x-36,y+19],[x+27,y+19],[x+27,y+19+depth],[x-36,y+19+depth]],'#28374b');poly([[x+27,y+19],[x+36,y-20],[x+36,y-20+depth],[x+27,y+19+depth]],'#192736');
+ poly([[x-26,y-20],[x+36,y-20],[x+27,y+18],[x-35,y+18]],['#546478','#5a687d','#506177','#55687b'][seed%4],'#8290a14d');
+ if(seed%5===0)poly([[x+20,y-18],[x+14,y-8],[x+18,y-4],[x+12,y+1],[x+16,y-4],[x+12,y-8]],'#425266')
+}
+function cloak(x,y,echo,t){
+ const bob=Math.sin(t/650+(echo?2:0))*1.5;ellipse(x,y+4,15,5,'#17223488');y+=bob;c.save();c.globalAlpha=echo?.84:1;c.shadowColor=echo?'#73e0e5':'#ffd493';c.shadowBlur=12;
+ poly([[x-7,y-18],[x+6,y-18],[x+14,y+1],[x+3,y+5],[x-13,y+1]],echo?'#72bac6':'#d8a659');c.shadowBlur=0;
+ poly([[x,y-34],[x+10,y-23],[x+6,y-15],[x-8,y-16],[x-10,y-23]],echo?'#adf1ea':'#ffe2a2');poly([[x-5,y-24],[x+6,y-24],[x+3,y-19],[x-3,y-19]],'#344051');c.restore()
+}
+function draw(t){
+ c.clearRect(0,0,1000,448);for(let i=0;i<140;i++){const x=(i*347+83)%1000,y=(i*i*17+31)%448;ellipse(x,y,i%7===0?1.6:.8,1,'rgba(211,224,247,'+(.26+.18*Math.sin(i+t/2300))+')')}
+ // Distant ridges frame the suspended rooms.
+ for(let j=0;j<3;j++){let ridge=[[0,448]];for(let x=0;x<=1040;x+=40)ridge.push([x,326+j*34+Math.sin(x*.009+j)*24+Math.sin(x*.026+j)*13]);ridge.push([1040,448]);poly(ridge,['#25314a','#202b41','#192439'][j])}
+ map.forEach((row,y)=>[...row].forEach((v,x)=>{if(v!=='.'){const [a,b]=pos(x,y);slab(a,b,x*13+y*7)}}));
+ map.forEach((row,y)=>[...row].forEach((v,x)=>{if(v==='.')return;const [a,b]=pos(x,y);
+ if('pb'.includes(v)){const on=tile(player)===v||tile(ghost)===v;poly([[a-15,b-10],[a+21,b-10],[a+15,b+10],[a-21,b+10]],on?'#ac9163':'#384455','#d4b78d');c.fillStyle='#f4d8a5';if(v==='p'){c.fillRect(a-9,b-3,19,2);c.fillRect(a-10,b+2,19,2)}else{ellipse(a-6,b,3,3,'#f4d8a5');ellipse(a+6,b,3,3,'#f4d8a5')}}
+ if('ABC'.includes(v)){const open=openGate(v);c.fillStyle=open?'#9dd7c8':'#243444';c.fillRect(a-8,b-21,15,6);c.fillRect(a-16,b+12,15,6);if(!open){poly([[a-11,b+12],[a-4,b-17],[a-4,b-42],[a-11,b-13]],'#e6cda6','#f2dfb7');c.fillStyle='#c0a682';c.fillRect(a-14,b-14,8,26);c.fillRect(a-7,b-42,8,27)}c.fillStyle='#fff0c3';c.textAlign='center';c.font='14px monospace';c.fillText({A:'=',B:'••',C:'◎'}[v],a+8,b+5)}
+ if(v==='g'||v==='h'){c.save();c.shadowColor='#99e0d9';c.shadowBlur=11;ellipse(a,b,19,11,'#94cfc7');ellipse(a,b,15,8,'#344c60');if(v==='g')ellipse(a,b,6,3,'#b0ebe2');else poly([[a,b-5],[a+8,b],[a,b+5],[a-8,b]],'#ffe0a6');c.restore()}
+ for(const actor of [ghost,player]){
+   if(!actor||Math.round(actor.x)!==x||Math.round(actor.y)!==y)continue;
+   const [px,py]=pos(actor.x,actor.y);cloak(px+(actor===ghost?-3:2),py,actor===ghost,t);
+ }
+ }));
+}
+function frame(now){if(!document.hidden&&document.hasFocus()&&prev){acc+=Math.min(now-prev,150);const dir=axis();while(acc>=1000/hz){acc-=1000/hz;step(dir)}}prev=now;draw(now);requestAnimationFrame(frame)}
+// A quiet eight-bar theme. Schedule ahead on the audio clock to avoid frame jitter.
+let audio,bus,musicTimer,beat=0,nextBeat=0,enabled=true;
+const chords=[[50,57,65],[46,53,62],[53,60,69],[48,55,64],[50,57,65],[43,50,58],[46,53,62],[45,52,61]];
+const melody=[[69,72,74],[69,65,62],[65,69,72],[67,64,60],[69,72,77],[74,70,67],[65,69,70],[69,64,61]];
+function note(n,when,length,volume,wave='sine',attack=.018){
+ const osc=audio.createOscillator(),env=audio.createGain();
+ osc.type=wave;osc.frequency.value=440*2**((n-69)/12);
+ env.gain.setValueAtTime(.0001,when);env.gain.exponentialRampToValueAtTime(volume,when+attack);
+ env.gain.exponentialRampToValueAtTime(.0001,when+length);
+ osc.connect(env);env.connect(bus);osc.start(when);osc.stop(when+length+.01);
+ osc.onended=()=>{osc.disconnect();env.disconnect()};
+}
+function schedule(){
+ if(!enabled||!audio||audio.state!=='running'||document.hidden)return;
+ nextBeat=Math.max(nextBeat,audio.currentTime+.015);
+ while(nextBeat<audio.currentTime+.24){
+  const bar=Math.floor(beat/8)%8,k=beat%8,chord=chords[bar];
+  if(!k)note(chord[0]-12,nextBeat,3,.12,'sine',.23);
+  if(k%2===0)note(chord[[0,1,2,1][k/2]],nextBeat,1.6,.065,'triangle',.06);
+  if([1,4,6].includes(k))note(melody[bar][[1,4,6].indexOf(k)],nextBeat,1.35,.12);
+  nextBeat+=.42;beat++;
+ }
+}
+function startSound(){
+ if(!enabled||document.hidden)return;
+ const Engine=window.AudioContext||window.webkitAudioContext;if(!Engine)return;
+ if(!audio){audio=new Engine();bus=audio.createGain();bus.gain.value=.46;bus.connect(audio.destination);musicTimer=setInterval(schedule,80)}
+ if(audio.state!=='running')audio.resume().then(schedule).catch(()=>{});else schedule();
+}
+function cue(type){
+ if(!enabled||!audio)return;const t=audio.currentTime+.01;
+ const sequence=type==='rewind'?[81,76,72,69,62]:[62,69,74,77];
+ sequence.forEach((n,i)=>note(n,t+i*(type==='rewind'?.056:.15),type==='rewind'?.35:1.45,.21,'sine'));
+}
+el('sound').onclick=()=>{enabled=!enabled;el('sound').textContent=enabled?'声音开启':'声音关闭';el('sound').setAttribute('aria-pressed',String(enabled));if(enabled)startSound();else audio?.suspend()};
+for(const event of ['keydown','pointerdown'])window.addEventListener(event,e=>{if(e.target!==el('sound'))startSound()},{capture:true});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){heldKeys.clear();audio?.suspend()}else if(audio)startSound()});
+load(0);requestAnimationFrame(frame);
+</script></html>
+
+
